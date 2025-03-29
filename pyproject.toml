@@ -1,0 +1,11 @@
+[project]
+name = "miniunderstander"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.109.2",
+    "sqlalchemy>=2.0.40",
+    "uvicorn==0.27.1",
+]
