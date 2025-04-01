@@ -1,95 +1,170 @@
-import React, { useState } from 'react';
-import { Box, Typography, Paper, Container, Button } from '@mui/material';
-import { PlanForm } from './components/PlanForm';
-import { PlanList } from './components/PlanList';
-import { usePlans } from './hooks/usePlans';
+import React, { useState, useEffect } from 'react';
+import { Container, Typography, Box, Button, TextField, Chip, CircularProgress, Alert } from '@mui/material';
+import { format } from 'date-fns';
+import { planService } from './services/planService';
 import { Plan } from './types/plan';
 
 function App() {
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [newPlan, setNewPlan] = useState({ title: '', description: '' });
   const [showPlans, setShowPlans] = useState(true);
-  const { plans, loading, error, success, createPlan } = usePlans();
 
-  const handleCreatePlan = async (plan: Omit<Plan, 'id'>) => {
-    await createPlan(plan);
+  const fetchPlans = async () => {
+    try {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const data = await planService.getPlansByDate(today);
+      setPlans(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    fetchPlans();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await planService.createPlan({
+        ...newPlan,
+        date: format(new Date(), 'yyyy-MM-dd'),
+        status: 'pending'
+      });
+      setNewPlan({ title: '', description: '' });
+      fetchPlans();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      await planService.deletePlan(id);
+      fetchPlans(); // Refresh the list after deletion
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'success';
+      case 'in_progress':
+        return 'warning';
+      case 'pending':
+        return 'default';
+      default:
+        return 'default';
+    }
+  };
+
+  if (loading) {
+    return (
+      <Container maxWidth="md">
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+          <CircularProgress />
+        </Box>
+      </Container>
+    );
+  }
 
   return (
     <Container maxWidth="md">
-      <Box sx={{ 
-        py: 4,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4
-      }}>
-        <Typography 
-          variant="h3" 
-          component="h1" 
-          sx={{ 
-            fontWeight: 'bold',
-            color: 'primary.main',
-            textAlign: 'center',
-            mb: 2
-          }}
-        >
-          Daily Plan
+      <Box sx={{ my: 4 }}>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Daily Plan Manager
         </Typography>
-        
-        <Paper 
-          elevation={3} 
-          sx={{ 
-            p: 4, 
-            borderRadius: 2,
-            backgroundColor: 'background.paper'
-          }}
-        >
-          <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
-            Create New Plan
-          </Typography>
-          
-          <PlanForm 
-            onSubmit={handleCreatePlan}
-            error={error}
-            success={success}
+
+        <Box component="form" onSubmit={handleSubmit} sx={{ mb: 4 }}>
+          <TextField
+            fullWidth
+            label="Title"
+            value={newPlan.title}
+            onChange={(e) => setNewPlan({ ...newPlan, title: e.target.value })}
+            margin="normal"
+            required
           />
-        </Paper>
+          <TextField
+            fullWidth
+            label="Description"
+            value={newPlan.description}
+            onChange={(e) => setNewPlan({ ...newPlan, description: e.target.value })}
+            margin="normal"
+            multiline
+            rows={3}
+          />
+          <Button
+            type="submit"
+            variant="contained"
+            color="primary"
+            sx={{ mt: 2 }}
+          >
+            Add Plan
+          </Button>
+        </Box>
 
-        <Paper 
-          elevation={3} 
-          sx={{ 
-            p: 4, 
-            borderRadius: 2,
-            backgroundColor: 'background.paper'
-          }}
-        >
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between',
-            mb: 3 
-          }}>
-            <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-              Today's Plans
-            </Typography>
-            <Button 
-              size="small" 
-              onClick={() => setShowPlans(!showPlans)}
-              variant="outlined"
-              sx={{ 
-                borderRadius: 2,
-                textTransform: 'none'
-              }}
-            >
-              {showPlans ? 'Hide Plans' : 'Show Plans'}
-            </Button>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6">Today's Plans</Typography>
+          <Button
+            variant="outlined"
+            onClick={() => setShowPlans(!showPlans)}
+          >
+            {showPlans ? 'Hide Plans' : 'Show Plans'}
+          </Button>
+        </Box>
+
+        {showPlans && (
+          <Box>
+            {plans.length === 0 ? (
+              <Typography>No plans for today</Typography>
+            ) : (
+              plans.map((plan) => (
+                <Box
+                  key={plan.id}
+                  sx={{
+                    p: 2,
+                    mb: 2,
+                    border: '1px solid #ddd',
+                    borderRadius: 1,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Box>
+                    <Typography variant="h6">{plan.title}</Typography>
+                    <Typography color="text.secondary">{plan.description}</Typography>
+                    <Chip
+                      label={plan.status}
+                      color={getStatusColor(plan.status)}
+                      size="small"
+                      sx={{ mt: 1 }}
+                    />
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={() => handleDelete(plan.id)}
+                  >
+                    Delete
+                  </Button>
+                </Box>
+              ))
+            )}
           </Box>
-
-          {showPlans && (
-            <PlanList 
-              plans={plans}
-              loading={loading}
-            />
-          )}
-        </Paper>
+        )}
       </Box>
     </Container>
   );
